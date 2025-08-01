@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>迷你世界二维表编辑器</title>
+    <style>
+        :root {
+            --primary-color: #409EFF;
+            --danger-color: #F56C6C;
+            --success-color: #67C23A;
+        }
+
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+
+        .delete-btn {
+            padding: 2px 6px;
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .header-cell > div {
+            margin: 2px 0;
+        }
+
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .csv-table {
+            border-collapse: collapse;
+            min-width: 100%;
+            table-layout: fixed;
+        }
+
+        .csv-table th, 
+        .csv-table td {
+            border: 1px solid #ebeef5;
+            padding: 12px;
+            min-width: 120px;
+            vertical-align: top;
+            background: white;
+        }
+
+        .fixed-column {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background: #fafafa !important;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+        }
+
+        .header-cell {
+            background: #fafafa;
+            font-weight: 500;
+        }
+
+        .field-remark {
+            font-size: 0.8em;
+            color: #909399;
+            line-height: 1.4;
+        }
+
+        .row-controls {
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid #dcdfe6;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+            border-color: var(--danger-color);
+        }
+
+        .color-picker {
+            width: 30px;
+            height: 30px;
+            padding: 2px;
+        }
+
+        .position-inputs input {
+            width: 50px;
+            margin: 2px;
+        }
+
+        .bool-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 24px;
+        }
+
+        .bool-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .bool-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .bool-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .bool-slider {
+            background-color: var(--success-color);
+        }
+
+        input:checked + .bool-slider:before {
+            transform: translateX(16px);
+        }
+        footer {
+            text-align: center;
+            margin: 30px 0 20px;
+            color: #909399;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        footer a {
+            text-decoration: none;
+            color: inherit;
+            transition: color 0.3s;
+        }
+        footer a:hover {
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row-controls">
+            <button class="btn btn-primary" onclick="importCSV()">导入CSV</button>
+            <button class="btn btn-primary" onclick="exportCSV()">导出CSV</button>
+        </div>
+
+        <div class="add-column-form" style="margin-top:20px">
+            <input type="text" id="newRemark" placeholder="字段备注（可选）">
+            <input type="text" id="newName" placeholder="字段名称*" required>
+            <select id="newType">
+                <option value="number">数字</option>
+                <option value="position">位置</option>
+                <option value="string">字符串</option>
+                <option value="bool">布尔值</option>
+                <option value="block">方块</option>
+                <option value="item">道具</option>
+                <option value="actorid">生物</option>
+                <option value="effectid">粒子</option>
+                <option value="player">玩家</option>
+                <option value="objid">对象</option>
+                <option value="color">颜色</option>
+                <option value="image">图像</option>
+            </select>
+            <button class="btn btn-primary" onclick="addColumn()">新增列</button>
+			<button class="btn btn-primary" onclick="addRow()">新增行</button>
+
+        </div>
+
+        <div id="table-container"></div>
+    </div>
+
+    <footer>
+        <p>作者：niao 陈小白</p>
+        <p>
+            <a href="https://beian.miit.gov.cn/" target="_blank">
+                鲁ICP备2025159569号-1
+            </a>
+        </p>
+    </footer>
+
+    <script>
+        let csvData = [];
+        
+        function init() {
+            const sampleData = `字段备注,示例数量
+字段名,数量
+字段类型,number
+1,10
+2,9
+3,0`;
+            parseCSV(sampleData);
+            renderTable();
+        }
+
+        function renumberRows() {
+            for (let r = 3; r < csvData.length; r++) {
+                csvData[r][0] = (r - 2).toString();
+            }
+        }
+
+        function addRow() {
+            const newRow = ['0'];
+            for (let c = 1; c < csvData[1].length; c++) {
+                const fieldType = csvData[2][c];
+                let defaultValue = "";
+                
+                switch(fieldType) {
+                    case "number": defaultValue = "0"; break;
+                    case "position": defaultValue = "0|0|0"; break;
+                    case "bool": defaultValue = "0"; break;
+                    case "color": defaultValue = "#000000"; break;
+                    default: defaultValue = "";
+                }
+                newRow.push(defaultValue);
+            }
+            csvData.push(newRow);
+            renderTable();
+        }
+
+        function parseCSV(text) {
+            const rows = text.split(/\r?\n/).filter(row => row.trim());
+            const headers = rows.slice(0,3).map(row => row.split(','));
+            const dataRows = rows.slice(3);
+            
+            csvData = [
+                headers[0],
+                headers[1],
+                headers[2],
+                ...dataRows.map(row => row.split(','))
+            ];
+        }
+
+        function renderTable() {
+            renumberRows();
+            const container = document.getElementById('table-container');
+            container.innerHTML = '';
+            
+            const table = document.createElement('table');
+            table.className = 'csv-table';
+            
+            // 表头
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = '<th class="fixed-column header-cell">行号</th>';
+            
+            for(let i = 1; i < csvData[0].length; i++) {
+                const th = document.createElement('th');
+                th.className = 'header-cell';
+                th.innerHTML = `
+                    <div class="field-remark">${csvData[0][i]}</div>
+                    <div>${csvData[1][i]}</div>
+                    <div class="field-remark">${csvData[2][i]}</div>
+                    <button class="btn btn-danger delete-btn" onclick="deleteColumn(${i})">×</button>
+                `;
+                headerRow.appendChild(th);
+            }
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // 数据行
+            const tbody = document.createElement('tbody');
+            for(let r = 3; r < csvData.length; r++) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="fixed-column">${csvData[r][0]}</td>`;
+                
+                for(let c = 1; c < csvData[r].length; c++) {
+                    const td = document.createElement('td');
+                    const fieldType = csvData[2][c];
+                    td.innerHTML = createInput(fieldType, csvData[r][c], r, c);
+                    tr.appendChild(td);
+                }
+                
+                const controlTd = document.createElement('td');
+                controlTd.innerHTML = `
+                    <button class="btn btn-danger" 
+                            onclick="if(confirm('确定删除此行？')){deleteRow(${r})}">
+                        删除
+                    </button>
+                `;
+                tr.appendChild(controlTd);
+                tbody.appendChild(tr);
+            }
+            
+            table.appendChild(tbody);
+            container.appendChild(table);
+        }
+
+        function createInput(type, value, row, col) {
+            switch(type) {
+                case 'position':
+                    const [x,y,z] = value.split('|');
+                    return `
+                        <div class="position-inputs">
+                            <input type="number" value="${x}" 
+                                onchange="updatePosition(${row},${col},0,this.value)">
+                            <input type="number" value="${y}" 
+                                onchange="updatePosition(${row},${col},1,this.value)">
+                            <input type="number" value="${z}" 
+                                onchange="updatePosition(${row},${col},2,this.value)">
+                        </div>
+                    `;
+                case 'color':
+                    return `<input type="color" value="${value}" 
+                              onchange="updateCell(${row},${col},this.value)" 
+                              class="color-picker">`;
+                case 'bool':
+                    return `
+                        <label class="bool-switch">
+                            <input type="checkbox" ${value === '1' ? 'checked' : ''} 
+                                   onchange="updateCell(${row},${col},this.checked ? '1' : '0')">
+                            <span class="bool-slider"></span>
+                        </label>
+                    `;
+                default:
+                    return `<input type="text" value="${value}" 
+                              onchange="updateCell(${row},${col},this.value)">`;
+            }
+        }
+
+        function updateCell(row, col, value) {
+            csvData[row][col] = value;
+        }
+
+        function updatePosition(row, col, index, value) {
+            const arr = csvData[row][col].split('|');
+            arr[index] = value;
+            csvData[row][col] = arr.join('|');
+        }
+
+        function addColumn() {
+            const remark = document.getElementById('newRemark').value;
+            const name = document.getElementById('newName').value;
+            const type = document.getElementById('newType').value;
+            
+            if(!name || !type) {
+                alert('请填写字段名称和类型');
+                return;
+            }
+            
+            csvData[0].push(remark || '');
+            csvData[1].push(name);
+            csvData[2].push(type);
+            
+            for(let r = 3; r < csvData.length; r++) {
+                csvData[r].push('');
+            }
+            
+            document.getElementById('newRemark').value = '';
+            document.getElementById('newName').value = '';
+            renderTable();
+        }
+
+        function deleteColumn(colIndex) {
+            if (confirm('确定要删除此列吗？')) {
+                csvData.forEach(row => row.splice(colIndex, 1));
+                renderTable();
+            }
+        }
+
+        function exportCSV() {
+            let csvContent = '';
+            csvData.forEach(row => {
+                csvContent += row.map(f => `"${f.replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+            
+            const blob = new Blob(["\uFEFF"+csvContent], {type: 'text/csv;charset=utf-8;'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'data.csv';
+            link.click();
+        }
+
+        function importCSV() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = e => {
+                    parseCSV(e.target.result);
+                    renderTable();
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            input.click();
+        }
+
+        function deleteRow(row) {
+            csvData.splice(row, 1);
+            renderTable();
+        }
+
+        init();
+    </script>
+</body>
+</html>
